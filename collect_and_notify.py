@@ -37,6 +37,11 @@ import feedparser
 import yaml
 import requests
 
+try:
+    from googlenewsdecoder import gnewsdecoder
+except ImportError:  # ローカル未インストール時にもクラッシュしないようにする
+    gnewsdecoder = None
+
 
 # ---------------------------------------------------------------
 # 設定読み込み
@@ -46,12 +51,23 @@ HISTORY_FILE = os.environ.get("HISTORY_FILE", "data/sent_urls.json")
 LOOKBACK_HOURS = int(os.environ.get("LOOKBACK_HOURS", "26"))
 MAX_ITEMS_PER_SOURCE = int(os.environ.get("MAX_ITEMS_PER_SOURCE", "10"))
 DRY_RUN = os.environ.get("DRY_RUN", "0") == "1"
+RESOLVE_LINKS = os.environ.get("RESOLVE_LINKS", "1") == "1"
 
 # Gemini API（無料枠）による「示唆付き要約」設定
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 # 1回のAPI呼び出しに含める記事数の上限（無料枠のトークン制限内に収めるため）
 GEMINI_MAX_ITEMS = int(os.environ.get("GEMINI_MAX_ITEMS", "40"))
+
+# 採用・求人系の記事を除外するためのキーワード（全ソース共通で適用）
+GLOBAL_EXCLUDE_KEYWORDS = [
+    "採用", "求人", "中途採用", "新卒採用", "キャリア採用", "採用情報",
+    "採用ページ", "インターンシップ", "internship",
+    "we're hiring", "we are hiring", "now hiring", "job opening",
+    "job openings", "career opportunities", "apply now",
+    "join our team", "recruiting", "recruitment", "vacancy", "vacancies",
+    "open positions", "hiring now",
+]
 
 JST = timezone(timedelta(hours=9))
 
@@ -105,6 +121,42 @@ def matches_keywords(entry, keywords):
     return any(kw.lower() in text for kw in keywords)
 
 
+def matches_exclude_keywords(entry, exclude_keywords):
+    """採用・求人系など、除外したい記事かどうかを判定する"""
+    if not exclude_keywords:
+        return False
+    text = (entry.get("title", "") + " " + entry.get("summary", "")).lower()
+    return any(kw.lower() in text for kw in exclude_keywords)
+
+
+_link_resolve_cache = {}
+
+
+def resolve_original_link(link):
+    """
+    Google Newsのリダイレクトリンク（news.google.com/...）を
+    可能な限り元記事（一次情報）のURLに変換する。
+    解決できない場合は元のリンクをそのまま返す（処理を止めない）。
+    """
+    if not link or "news.google.com" not in link:
+        return link
+    if not RESOLVE_LINKS or gnewsdecoder is None:
+        return link
+    if link in _link_resolve_cache:
+        return _link_resolve_cache[link]
+
+    resolved = link
+    try:
+        result = gnewsdecoder(link, interval=1)
+        if result and result.get("status") and result.get("decoded_url"):
+            resolved = result["decoded_url"]
+    except Exception as e:
+        print(f"[WARN] リンク解決に失敗: {link} ({e})")
+
+    _link_resolve_cache[link] = resolved
+    return resolved
+
+
 def fetch_source(source):
     """1つのソース定義から新着記事のリストを取得する"""
     stype = source.get("type", "rss")
@@ -127,6 +179,7 @@ def fetch_source(source):
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
     keywords = source.get("keywords") or []
+    exclude_keywords = GLOBAL_EXCLUDE_KEYWORDS + (source.get("exclude_keywords") or [])
 
     results = []
     for entry in feed.entries[: MAX_ITEMS_PER_SOURCE * 3]:
@@ -135,8 +188,10 @@ def fetch_source(source):
             continue
         if not matches_keywords(entry, keywords):
             continue
+        if matches_exclude_keywords(entry, exclude_keywords):
+            continue
 
-        link = entry.get("link", "")
+        link = resolve_original_link(entry.get("link", ""))
         title = html.unescape(entry.get("title", "(タイトルなし)"))
         summary_raw = entry.get("summary", "") or entry.get("description", "")
         summary = html.unescape(summary_raw)
@@ -203,14 +258,17 @@ def call_gemini_summarize(items):
     prompt = f"""あなたは製造業クライアントを担当する経営コンサルタントのリサーチアシスタントです。
 以下は本日収集した、国内外の製造業ニュースおよび主要コンサルティングファーム／シンクタンクが
 発表したインサイト記事のリストです（JSON配列、各要素にid/title/source/region/snippetを含む）。
+titleやsnippetは英語や中国語など日本語以外の言語の場合があります。
 
 # タスク
-1. 各記事について、次の2つを日本語で作成してください。
+各記事について、次の3つを **必ず日本語で** 作成してください（原文が英語等でも日本語に翻訳・要約すること）。
+   - title_ja: 記事タイトルの日本語訳（直訳ではなく、自然な日本語の見出しとして。40字程度）
    - summary: 記事内容の一文要約（60字程度、事実ベース、断定しすぎない）
    - implication: コンサルタントが顧客提案・自社の景況感把握に活かせる示唆（so-what）を1〜2文で。
      「なぜ重要か」「どのクライアント/業界に関係しそうか」を意識すること。
-2. 記事全体を俯瞰し、共通して見られるトレンドやテーマを3〜5個、それぞれ1〜2文で抽出してください（trends）。
-   単なる記事の並べ替えではなく、複数記事に共通する構造的な変化・示唆を書くこと。
+
+さらに、記事全体を俯瞰し、共通して見られるトレンドやテーマを3〜5個、それぞれ1〜2文で日本語で
+抽出してください（trends）。単なる記事の並べ替えではなく、複数記事に共通する構造的な変化・示唆を書くこと。
 
 # 記事リスト
 {json.dumps(numbered_items, ensure_ascii=False)}
@@ -220,7 +278,7 @@ def call_gemini_summarize(items):
 {{
   "trends": ["トレンド1の説明", "トレンド2の説明", ...],
   "items": [
-    {{"id": 0, "summary": "...", "implication": "..."}},
+    {{"id": 0, "title_ja": "...", "summary": "...", "implication": "..."}},
     ...
   ]
 }}
@@ -257,6 +315,7 @@ def call_gemini_summarize(items):
             continue
         link = target_items[idx]["link"]
         per_item[link] = {
+            "title_ja": entry.get("title_ja", ""),
             "summary": entry.get("summary", ""),
             "implication": entry.get("implication", ""),
         }
@@ -301,7 +360,10 @@ def build_email_body(items, gemini_result=None):
             for it in cat_items:
                 ai = per_item.get(it["link"])
                 body_extra = ""
+                display_title = it["title"]
                 if ai and (ai.get("summary") or ai.get("implication")):
+                    if ai.get("title_ja"):
+                        display_title = ai["title_ja"]
                     if ai.get("summary"):
                         body_extra += (
                             f'<br><span style="font-size:13px;color:#444;">{html.escape(ai["summary"])}</span>'
@@ -312,7 +374,7 @@ def build_email_body(items, gemini_result=None):
                             f'💡 示唆: {html.escape(ai["implication"])}</span>'
                         )
                 else:
-                    # Geminiが使えない場合は元のRSS要約にフォールバック
+                    # Geminiが使えない場合は元のRSS要約にフォールバック（未翻訳の場合あり）
                     summary_txt = strip_html(it["summary"])
                     if summary_txt:
                         body_extra = f'<br><span style="font-size:13px;color:#444;">{html.escape(summary_txt)}</span>'
@@ -320,7 +382,7 @@ def build_email_body(items, gemini_result=None):
                 parts.append(
                     '<li style="margin-bottom:12px;">'
                     f'<a href="{html.escape(it["link"])}" style="color:#0b5fff;text-decoration:none;font-weight:bold;">'
-                    f'{html.escape(it["title"])}</a><br>'
+                    f'{html.escape(display_title)}</a><br>'
                     f'<span style="color:#666;font-size:12px;">{html.escape(it["source_name"])}'
                     f'{" ・ " + it["published"] if it["published"] else ""}</span>'
                     + body_extra
