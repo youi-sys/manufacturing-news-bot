@@ -1,0 +1,209 @@
+# =========================================================
+# 収集対象ソース設定ファイル
+# =========================================================
+# type: "rss"   -> そのままRSS/Atomフィードを取得
+# type: "gnews" -> Google News RSS検索を使い、query に指定した
+#                  検索式（site:で一次情報ドメインを指定可能）で
+#                  ニュースを収集します。
+#
+# 自由に追加・削除・コメントアウトして調整してください。
+# =========================================================
+
+sources:
+
+  # ---------- 国内：官公庁・団体（公式一次情報） ----------
+  - name: "経済産業省 ニュースリリース"
+    type: rss
+    url: "https://www.meti.go.jp/ml_index_release_atom.xml"
+    region: domestic
+    category: "政策・産業全般"
+    # 官公庁フィードは製造業以外の話題も多いのでキーワードで絞り込む
+    keywords:
+      - "製造業"
+      - "工場"
+      - "スマートファクトリー"
+      - "ロボット"
+      - "DX"
+      - "半導体"
+      - "サプライチェーン"
+      - "生産性"
+      - "自動車"
+      - "脱炭素"
+      - "カーボンニュートラル"
+
+  # ---------- 国内：主要製造業（一次情報ドメインに限定したニュース検索） ----------
+  - name: "トヨタ自動車 公式発表"
+    type: gnews
+    query: "site:global.toyota OR site:toyota.jp"
+    region: domestic
+    category: "自動車"
+    keywords: []   # 企業公式ドメイン限定のため追加の絞り込みは不要
+
+  - name: "日産自動車 公式発表"
+    type: gnews
+    query: "site:nissan-global.com"
+    region: domestic
+    category: "自動車"
+    keywords: []
+
+  - name: "パナソニック ホールディングス 公式発表"
+    type: gnews
+    query: "site:panasonic.com OR site:panasonic.co.jp"
+    region: domestic
+    category: "電機"
+    keywords: []
+
+  - name: "日立製作所 公式発表"
+    type: gnews
+    query: "site:hitachi.co.jp OR site:hitachi.com"
+    region: domestic
+    category: "電機・インフラ"
+    keywords: []
+
+  - name: "デンソー 公式発表"
+    type: gnews
+    query: "site:denso.com"
+    region: domestic
+    category: "自動車部品"
+    keywords: []
+
+  - name: "ファナック／安川電機 公式発表（産業用ロボット）"
+    type: gnews
+    query: "site:fanuc.co.jp OR site:yaskawa.co.jp"
+    region: domestic
+    category: "産業用ロボット"
+    keywords: []
+
+  # ---------- 海外：主要製造業（一次情報ドメインに限定したニュース検索） ----------
+  - name: "Siemens Press"
+    type: gnews
+    query: "site:press.siemens.com OR site:new.siemens.com"
+    region: overseas
+    category: "電機・オートメーション"
+    keywords: []
+
+  - name: "GE / GE Vernova Press"
+    type: gnews
+    query: "site:ge.com OR site:gevernova.com"
+    region: overseas
+    category: "重工業・エネルギー"
+    keywords: []
+
+  - name: "Bosch Press"
+    type: gnews
+    query: "site:bosch.com OR site:bosch-presse.de"
+    region: overseas
+    category: "自動車部品・電機"
+    keywords: []
+
+  - name: "Volkswagen / BMW Press"
+    type: gnews
+    query: "site:volkswagen-newsroom.com OR site:press.bmwgroup.com"
+    region: overseas
+    category: "自動車"
+    keywords: []
+
+  # ---------- コンサルティングファーム／シンクタンクのインサイト ----------
+  # 不定期更新のため、頻度は気にせず全件チェックしてOK（cronで毎日巡回すれば十分）
+
+  - name: "McKinsey Insights & Publications（公式RSS）"
+    type: rss
+    url: "https://www.mckinsey.com/insights/rss"
+    region: overseas
+    category: "コンサルインサイト"
+    keywords:
+      - "manufactur"
+      - "industrial"
+      - "factory"
+      - "supply chain"
+      - "operations"
+      - "automotive"
+      - "semiconductor"
+      - "automation"
+
+  - name: "BCG Insights（製造業関連）"
+    type: gnews
+    query: "site:bcg.com (manufacturing OR industrial OR \"supply chain\" OR factory)"
+    region: overseas
+    category: "コンサルインサイト"
+    keywords: []
+
+  - name: "Bain Insights（製造業関連）"
+    type: gnews
+    query: "site:bain.com (manufacturing OR industrial OR \"supply chain\")"
+    region: overseas
+    category: "コンサルインサイト"
+    keywords: []
+
+  - name: "Deloitte Insights（製造業関連）"
+    type: gnews
+    query: "site:deloitte.com (manufacturing OR industrial OR \"supply chain\")"
+    region: overseas
+    category: "コンサルインサイト"
+    keywords: []
+
+  - name: "PwC Insights（製造業関連）"
+    type: gnews
+    query: "site:pwc.com (manufacturing OR industrial OR \"supply chain\")"
+    region: overseas
+    category: "コンサルインサイト"
+    keywords: []
+
+  - name: "Accenture Insights（製造業関連）"
+    type: gnews
+    query: "site:accenture.com (manufacturing OR industrial OR \"supply chain\")"
+    region: overseas
+    category: "コンサルインサイト"
+    keywords: []
+
+  - name: "Roland Berger Insights（製造業関連）"
+    type: gnews
+    query: "site:rolandberger.com (manufacturing OR industrial OR \"supply chain\")"
+    region: overseas
+    category: "コンサルインサイト"
+    keywords: []
+
+  - name: "デロイト トーマツ／PwC Japan／アクセンチュア日本 インサイト"
+    type: gnews
+    query: "site:deloitte.com/jp OR site:pwc.com/jp OR site:accenture.com/jp 製造業"
+    region: domestic
+    category: "コンサルインサイト"
+    keywords: []
+
+  - name: "野村総合研究所（NRI）レポート"
+    type: gnews
+    query: "site:nri.com 製造業"
+    region: domestic
+    category: "シンクタンクインサイト"
+    keywords: []
+
+  - name: "三菱UFJリサーチ&コンサルティング レポート"
+    type: gnews
+    query: "site:murc.jp 製造業"
+    region: domestic
+    category: "シンクタンクインサイト"
+    keywords: []
+
+  - name: "日本総合研究所（JRI）レポート"
+    type: gnews
+    query: "site:jri.com 製造業"
+    region: domestic
+    category: "シンクタンクインサイト"
+    keywords: []
+
+  # ---------- 全般：一次情報に限らないトレンド補足枠 ----------
+  # 一次情報ドメインに縛られず「スマートファクトリー」等のキーワードで
+  # 幅広く拾いたい場合の補助枠。ノイズが増える場合はコメントアウトしてください。
+  - name: "製造業DX・スマートファクトリー 関連ニュース（国内）"
+    type: gnews
+    query: "製造業 (スマートファクトリー OR DX OR デジタルツイン OR 生成AI活用)"
+    region: domestic
+    category: "トレンド全般"
+    keywords: []
+
+  - name: "Manufacturing Innovation News (Global)"
+    type: gnews
+    query: "manufacturing (\"smart factory\" OR \"Industry 4.0\" OR \"digital twin\" OR automation)"
+    region: overseas
+    category: "トレンド全般"
+    keywords: []

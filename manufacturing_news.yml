@@ -1,0 +1,41 @@
+name: Manufacturing News Digest
+
+on:
+  schedule:
+    # 毎日 JST 8:00 に実行 (UTC 23:00 の前日)
+    - cron: "0 23 * * *"
+  workflow_dispatch: {}   # 手動実行ボタンも使えるようにする
+
+permissions:
+  contents: write   # 送信済み履歴ファイルをコミットし直すために必要
+
+jobs:
+  collect-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run collector & send email
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python collect_and_notify.py
+
+      - name: Commit updated history
+        run: |
+          git config user.name "manufacturing-news-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/sent_urls.json
+          git diff --cached --quiet || git commit -m "chore: update sent history [skip ci]"
+          git push
